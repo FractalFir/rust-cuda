@@ -300,8 +300,12 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
         unsafe {
             let ty = self.val_ty(v);
             let (new_ty, changed) = get_transformed_type(self.cx, ty);
+            let ret = llvm::LLVMGetReturnType(llvm::LLVMGetElementType(self.val_ty(self.llfn())));
             if changed {
                 v = transmute_llval(self.llbuilder, self.cx, v, new_ty);
+            }
+            if ret != new_ty{
+                v = llvm::LLVMBuildBitCast(self.llbuilder, v, ret, c"ret".as_ptr());
             }
             llvm::LLVMBuildRet(self.llbuilder, v);
         }
@@ -923,9 +927,13 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
     }
 
     /* Comparisons */
-    fn icmp(&mut self, op: IntPredicate, lhs: &'ll Value, rhs: &'ll Value) -> &'ll Value {
+    fn icmp(&mut self, op: IntPredicate, lhs: &'ll Value, mut rhs: &'ll Value) -> &'ll Value {
         trace!("Icmp lhs: `{:?}`, rhs: `{:?}`", lhs, rhs);
-
+        let lhs_ty = self.val_ty(lhs);
+        let rhs_ty = self.val_ty(rhs);
+        if lhs_ty != rhs_ty{
+            rhs = llvm::LLVMBuildBitCast(self.llbuilder, rhs, rhs_ty, UNNAMED);
+        }
         unsafe {
             let op = llvm::IntPredicate::from_generic(op);
             llvm::LLVMBuildICmp(self.llbuilder, op as c_uint, lhs, rhs, unnamed())
